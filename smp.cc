@@ -251,8 +251,8 @@ main (int argc, char *argv[])
     }
   }
 
-  bool flow_monitor = true;
-  bool pcap = false;
+ // bool flow_monitor = true;
+  //bool pcap = false;
   int nFlows = 1;
   double duration = 5;
 
@@ -275,7 +275,7 @@ main (int argc, char *argv[])
   double receiverStopTime[nFlows];
   double sourceStartTime[nFlows];
   double sourceStopTime[nFlows];
-  int port[nFlows];
+   int port[nFlows];
 
   // Flow 1 - CLOUD GAME STREAMING
   int idx = 0;
@@ -384,63 +384,28 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
   devices = bottleneck.Install (gateways);
 //** END **//
 
-  std::cout << "\n#### RECEIVERS ####\n";
-  NodeContainer receivers;
-  receivers.Create (nFlows);
+  std::cout << "\n#### GATEWAY to RECEIVERS ####\n";
+  NodeContainer lineNodes1;
+  lineNodes1.Create (1);
+  lineNodes1.Add(gateways.Get(1));
   
-  PointToPointHelper b;
-  // capire se p2p helper accetta piu nodi o deve avere solo 2 nodi.
+  PointToPointHelper line1;
+  line1.SetDeviceAttribute ("DataRate", StringValue (btnBandwidth));
+  line1.SetChannelAttribute ("Delay", StringValue (btnDelay));
 
-  NodeContainer wifiApNode = p2pNodes.Get (0);
-
-
-  WifiHelper wifi;
-  wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
-
-  WifiMacHelper mac;
-
-  Ssid ssid = Ssid ("ns-3-ssid");
-  mac.SetType ("ns3::StaWifiMac",
-    "Ssid", SsidValue (ssid),
-    "ActiveProbing", BooleanValue (false));
-
-  NetDeviceContainer staDevices;
-  staDevices = wifi.Install (phy, mac, receivers);
-
-  mac.SetType ("ns3::ApWifiMac",
-               "Ssid", SsidValue (ssid));
-
-  NetDeviceContainer apDevices;
-  apDevices = wifi.Install (phy, mac, wifiApNode);
-
-  MobilityHelper mobility;
-  mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
-    "MinX", DoubleValue (0.0),
-    "MinY", DoubleValue (0.0),
-    "DeltaX", DoubleValue (5.0),
-    "DeltaY", DoubleValue (10.0),
-    "GridWidth", UintegerValue (3),
-    "LayoutType", StringValue ("RowFirst"));
-  mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel",
-    "Bounds", RectangleValue (Rectangle (-50, 50, -50, 50)));
-  mobility.Install (receivers);
-  mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
-  mobility.Install (wifiApNode);
+  NetDeviceContainer devicesRecv1 = line1.Install(lineNodes1);
 
 
-std::cout << "\n#### CREAZIONE NODI CSMA ####\n\n";
-//** CSMA - SOURCES **//
-  NodeContainer sources;
-  sources.Add (p2pNodes.Get(1));
-  sources.Create (nFlows);
+  std::cout << "\n#### SERVER to GATEWAY ####\n\n";
+  NodeContainer lineServer1;
+  lineServer1.Create (1);
+  lineServer1.Add(gateways.Get(0));
+  
+  PointToPointHelper server1;
+  server1.SetDeviceAttribute ("DataRate", StringValue (btnBandwidth));
+  server1.SetChannelAttribute ("Delay", StringValue (btnDelay));
 
-  CsmaHelper csmaS;
-  csmaS.SetChannelAttribute ("DataRate", StringValue (csmaBandwidth));
-  csmaS.SetChannelAttribute ("Delay", StringValue (csmaDelay));
-
-  NetDeviceContainer csmaDevicesS;
-  csmaDevicesS = csmaS.Install (sources);
-//** END **//
+  NetDeviceContainer devicesServ1 = server1.Install(lineServer1);
 
 
   std::cout << "\n#### INSTALLAZIONE STACK & ASSEGNAZIONE IP ####\n\n";
@@ -449,19 +414,14 @@ std::cout << "\n#### CREAZIONE NODI CSMA ####\n\n";
 
   QuicHelper stack; 
 
-  stack.InstallQuic (wifiApNode);
-  stack.InstallQuic (receivers);
-  stack.InstallQuic (sources);
-
-  
-
+  stack.InstallQuic (lineNodes1);
+  stack.InstallQuic (lineServer1);
   
   // INTERNET
 /*
   InternetStackHelper stack;
   stack.Install (receivers);
   stack.Install (sources);
-  stack.Install (wifiApNode);
 */
 
   Ipv4AddressHelper address;
@@ -470,140 +430,48 @@ std::cout << "\n#### CREAZIONE NODI CSMA ####\n\n";
   Ipv4InterfaceContainer interfaces = address.Assign (devices);
 
   address.SetBase ("10.1.2.0", "255.255.255.0");
-   Ipv4InterfaceContainer intR = address.Assign (staDevices);
-  address.Assign (apDevices);
-
+  Ipv4InterfaceContainer intR = address.Assign (devicesRecv1);
 
   address.SetBase ("10.1.3.0", "255.255.255.0");
-  Ipv4InterfaceContainer intCsmaS = address.Assign (csmaDevicesS);
+  Ipv4InterfaceContainer intS = address.Assign (devicesServ1);
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
   
 
-  
+  int i = 0;
+
+  ApplicationContainer sourceApps;
+  ApplicationContainer sinkApps;
+
+  QuicClientHelper source (intR.GetAddress (0), port[0]);
+  source.SetAttribute ("MaxPackets", UintegerValue (maxPackets[i]));
+  source.SetAttribute ("Interval", TimeValue (MicroSeconds (interval[i])));
+  source.SetAttribute ("PacketSize", UintegerValue (packetSize[i]));
+  sourceApps = source.Install (lineServer1.Get(0));
 
 
-std::cout << "\n\n#### CREAZIONE FLUSSI ####\n\n";
-  for(uint16_t i = 0; i < nFlows; i++)
-  {
-    ApplicationContainer sourceApps;
-    ApplicationContainer sinkApps;
-   
-/*
-    if(i == 1) {
-      BulkSendHelper source ("ns3::TcpSocketFactory",InetSocketAddress (intR.GetAddress (nodeId[i]-1), port[i]));
-      // Set the amount of data to send in bytes.  Zero is unlimited.
-      source.SetAttribute ("MaxBytes", UintegerValue (0));
-      sourceApps = source.Install (sources.Get(nodeId[i]));
-
-      // Create a PacketSinkApplication and install it on node 1
-      PacketSinkHelper sink ("ns3::TcpSocketFactory",
-                             InetSocketAddress (Ipv4Address::GetAny (), port[i]));
-      sinkApps = sink.Install (receivers.Get(nodeId[i]-1));
-
-
-    } else {
-*/
-      //Sources (QuicClient invia un flusso dati)
-      
-      //----- QUIC
-      //Client (il parametro e' il nodo a cui invio il flusso)
-      QuicClientHelper source (intR.GetAddress (nodeId[i]-1), port[i]);
-      //------UDP
-      //UdpClientHelper source (intR.GetAddress (nodeId[i]-1), port[i]);
-
-      source.SetAttribute ("MaxPackets", UintegerValue (maxPackets[i]));
-      source.SetAttribute ("Interval", TimeValue (MicroSeconds (interval[i])));
-      source.SetAttribute ("PacketSize", UintegerValue (packetSize[i]));
-      sourceApps = source.Install (sources.Get(nodeId[i]));
-
-
-      // Receivers (QuicServer riceve i dati)
-     // UdpServerHelper sink (port[i]);
-      QuicServerHelper sink (port[i]);
-      sinkApps = sink.Install (receivers.Get(nodeId[i]-1));
+  QuicServerHelper sink (333);
+  sinkApps = sink.Install (lineNodes1.Get(0));
       
      
-    //}
-
-    sourceApps.Start (Seconds (sourceStartTime[i]));
-    sourceApps.Stop (Seconds (sourceStopTime[i]));
+   sourceApps.Start (Seconds (sourceStartTime[i]));
+   sourceApps.Stop (Seconds (sourceStopTime[i]));
 
     sinkApps.Start (Seconds (receiverStartTime[i]));
     sinkApps.Stop (Seconds (receiverStopTime[i]));
 
     // Trace
-    auto n1 = receivers.Get (nodeId[i] - 1);
-    auto n2 = sources.Get (nodeId[i]);
+    auto n1 = lineNodes1.Get (nodeId[i]);
+    auto n2 = lineServer1.Get (nodeId[i]);
     Time t1 = Seconds(receiverStartTime[i]+0.1);
     Time t2 = Seconds(sourceStartTime[i]+0.1);
     Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
     Simulator::Schedule (t1, &Traces, n1->GetId(), "./"+traceDir+"receiver_", ".txt");
-  }
-
-/*
-
-  // flussi di ritorno (comandi)
-
-  // Flusso 1 (Cloud Gaming)
-  int idn = 0;
-  QuicServerHelper server1 (933);
-  // ------UDP
-  //UdpServerHelper server (port[i]);
-    
-  ApplicationContainer serverApps1 = server1.Install (sources.Get(nodeId[idn]));
-  serverApps1.Start (Seconds (receiverStartTime[idn]));
-  serverApps1.Stop (Seconds (receiverStopTime[idn]));
-
-  // Sources (QuicClient invia un flusso dati)
-  //----- QUIC
-  // Client (il parametro e' il nodo a cui invio il flusso)
-  QuicClientHelper client1 (intCsmaS.GetAddress (nodeId[idn]), 933);
-  //------UDP
-  //UdpClientHelper client (intCsma1.GetAddress (nodeId[i]), port[i]);
-
-  client1.SetAttribute ("MaxPackets", UintegerValue(100000));
-  client1.SetAttribute ("Interval", TimeValue (MicroSeconds (6250)));
-  client1.SetAttribute ("PacketSize", UintegerValue (128));
-  ApplicationContainer clientApps1 = client1.Install (receivers.Get(nodeId[idn]-1));
-  clientApps1.Start (Seconds (sourceStartTime[idn]+0.05));
-  clientApps1.Stop (Seconds (sourceStopTime[idn]));
 
 
-  // Flusso 2 (Online Game)
-  idn = 2;
-  QuicServerHelper server2 (944);
-  // ------UDP
-  //UdpServerHelper server (port[i]);
-    
-  ApplicationContainer serverApps2 = server2.Install (sources.Get(nodeId[idn]));
-  serverApps2.Start (Seconds (receiverStartTime[idn]));
-  serverApps2.Stop (Seconds (receiverStopTime[idn]));
-
-  // Sources (QuicClient invia un flusso dati)
-
-  //----- QUIC
-  // Client (il parametro e' il nodo a cui invio il flusso)
-  QuicClientHelper client2 (intCsmaS.GetAddress (nodeId[idn]), 944);
-  //------UDP
-  //UdpClientHelper client (intCsma1.GetAddress (nodeId[i]), port[i]);
-
-  client2.SetAttribute ("MaxPackets", UintegerValue(100000));
-  client2.SetAttribute ("Interval", TimeValue (MicroSeconds (19194)));
-  client2.SetAttribute ("PacketSize", UintegerValue (127));
-  ApplicationContainer clientApps2 = client2.Install (receivers.Get(nodeId[idn]-1));
-  clientApps2.Start (Seconds (sourceStartTime[idn]+0.05));
-  clientApps2.Stop (Seconds (sourceStopTime[idn]));
-*/
-
-	if (pcap)
-	{
-	  pointToPoint.EnablePcapAll (traceDir + "pcap_trace", true);
-	}
-
-  //Packet::EnablePrinting ();
+//Packet::EnablePrinting ();
   //Packet::EnableChecking ();
-
+/*
 	FlowMonitorHelper flowHelper;
   double binWidth = 0.0001;
 	Config::SetDefault ("ns3::FlowMonitor::DelayBinWidth", DoubleValue (binWidth));
@@ -650,7 +518,7 @@ std::cout << "\n\n#### CREAZIONE FLUSSI ####\n\n";
                                   << "\t" << cum << "\t" << percCum << "\n";
         }
       }
-/*
+
       std::string jitterFile = traceDir"flow"+ind+"jitter.txt";
       std::ofstream osj (jitterFile.c_str (), std::ios::out|std::ios::binary);
 
@@ -660,10 +528,7 @@ std::cout << "\n\n#### CREAZIONE FLUSSI ####\n\n";
       Histogram jitters = iter->second.jitterHistogram;
       Histogram packetSizes = iter->second.packetSizeHistogram; 
       */
-    }
-  }
-
-
+    
   std::cout
       << "\n\n#################### SIMULATION END ####################\n\n";
   return 0;
