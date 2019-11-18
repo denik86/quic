@@ -279,15 +279,15 @@ main (int argc, char *argv[])
 
   // Flow 1 - CLOUD GAME STREAMING
   int idx = 0;
-  nodeId[idx] = 1;
+  nodeId[idx] = 0;
   port[idx] = 900;
   transport_prot[idx] = "quic"; // udp, tcp
   receiverStartTime[idx] = 0.9;
-  receiverStopTime[idx] = duration-1.0;
+  receiverStopTime[idx] = duration-0.2;
   sourceStartTime[idx] = 1.0;
   sourceStopTime[idx] = duration-1.0;
   maxPackets[idx] = 2000000;
-  interval[idx] = 200; // 10.5 Mbps
+  interval[idx] = 50000; // 10.5 Mbps
   packetSize[idx] = 1211;
 /*
   // Flow 2 - VIDEO STREAMING 4k
@@ -385,27 +385,27 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
 //** END **//
 
   std::cout << "\n#### GATEWAY to RECEIVERS ####\n";
-  NodeContainer lineNodes1;
-  lineNodes1.Create (1);
-  lineNodes1.Add(gateways.Get(1));
+  NodeContainer receivers;
+  receivers.Create (1);
+  receivers.Add(gateways.Get(1));
   
-  PointToPointHelper line1;
-  line1.SetDeviceAttribute ("DataRate", StringValue (btnBandwidth));
-  line1.SetChannelAttribute ("Delay", StringValue (btnDelay));
+  PointToPointHelper receiverLine1;
+  receiverLine1.SetDeviceAttribute ("DataRate", StringValue (btnBandwidth));
+  receiverLine1.SetChannelAttribute ("Delay", StringValue (btnDelay));
 
-  NetDeviceContainer devicesRecv1 = line1.Install(lineNodes1);
+  NetDeviceContainer receiverDev1= receiverLine1.Install(receivers);
 
 
   std::cout << "\n#### SERVER to GATEWAY ####\n\n";
-  NodeContainer lineServer1;
-  lineServer1.Create (1);
-  lineServer1.Add(gateways.Get(0));
+  NodeContainer sources;
+  sources.Create (1);
+  sources.Add(gateways.Get(0));
   
-  PointToPointHelper server1;
-  server1.SetDeviceAttribute ("DataRate", StringValue (btnBandwidth));
-  server1.SetChannelAttribute ("Delay", StringValue (btnDelay));
+  PointToPointHelper sourceLine1;
+  sourceLine1.SetDeviceAttribute ("DataRate", StringValue (btnBandwidth));
+  sourceLine1.SetChannelAttribute ("Delay", StringValue (btnDelay));
 
-  NetDeviceContainer devicesServ1 = server1.Install(lineServer1);
+  NetDeviceContainer sourceDev1 = sourceLine1.Install(sources);
 
 
   std::cout << "\n#### INSTALLAZIONE STACK & ASSEGNAZIONE IP ####\n\n";
@@ -414,8 +414,8 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
 
   QuicHelper stack; 
 
-  stack.InstallQuic (lineNodes1);
-  stack.InstallQuic (lineServer1);
+  stack.InstallQuic (receivers);
+  stack.InstallQuic (sources);
   
   // INTERNET
 /*
@@ -430,10 +430,10 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
   Ipv4InterfaceContainer interfaces = address.Assign (devices);
 
   address.SetBase ("10.1.2.0", "255.255.255.0");
-  Ipv4InterfaceContainer intR = address.Assign (devicesRecv1);
+  Ipv4InterfaceContainer intR = address.Assign (receiverDev1);
 
   address.SetBase ("10.1.3.0", "255.255.255.0");
-  Ipv4InterfaceContainer intS = address.Assign (devicesServ1);
+  Ipv4InterfaceContainer intS = address.Assign (sourceDev1);
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
   
@@ -443,15 +443,16 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
   ApplicationContainer sourceApps;
   ApplicationContainer sinkApps;
 
+// quando creo la sorgente, il parametro deve essere indirizzo del RICEVITORE.
   QuicClientHelper source (intR.GetAddress (0), port[0]);
   source.SetAttribute ("MaxPackets", UintegerValue (maxPackets[i]));
-  source.SetAttribute ("Interval", TimeValue (MicroSeconds (interval[i])));
+  source.SetAttribute ("Interval", TimeValue (MilliSeconds (interval[i])));
   source.SetAttribute ("PacketSize", UintegerValue (packetSize[i]));
-  sourceApps = source.Install (lineServer1.Get(0));
+  sourceApps = source.Install (sources.Get(0));
 
 
-  QuicServerHelper sink (333);
-  sinkApps = sink.Install (lineNodes1.Get(0));
+  QuicServerHelper sink (port[0]);
+  sinkApps = sink.Install (receivers.Get(0));
       
      
    sourceApps.Start (Seconds (sourceStartTime[i]));
@@ -461,12 +462,13 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
     sinkApps.Stop (Seconds (receiverStopTime[i]));
 
     // Trace
-    auto n1 = lineNodes1.Get (nodeId[i]);
-    auto n2 = lineServer1.Get (nodeId[i]);
+    auto n1 = receivers.Get (nodeId[i]);
+    auto n2 = sources.Get (nodeId[i]);
     Time t1 = Seconds(receiverStartTime[i]+0.1);
-    Time t2 = Seconds(sourceStartTime[i]+0.1);
-    Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
+    Time t2 = Seconds(sourceStartTime[i]+0.00001);
     Simulator::Schedule (t1, &Traces, n1->GetId(), "./"+traceDir+"receiver_", ".txt");
+    Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
+   
 
 
 //Packet::EnablePrinting ();
@@ -482,7 +484,7 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
  
   Ptr<FlowMonitor> monitor = flowHelper.GetMonitor();
   Simulator::Schedule (Seconds(0.1), &StatsFlowMonitor, traceDir, monitor);
-
+*/
 
   Simulator::Stop (Seconds (duration));
 
@@ -492,7 +494,7 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
       << "\n\n#################### RUN FINISHED ####################\n\n";
   Simulator::Destroy ();
 
-
+/*
 
   // Stampa dati presi da flowMonitor
   if (flow_monitor)
