@@ -56,6 +56,54 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("quic-tester");
 
+template <typename T, typename M>
+class Tuple
+{
+  public:
+    T first;
+    M second;
+
+    Tuple(T f_, M s_)
+    {
+      first = f_;
+      second = s_;
+    }
+};
+
+Tuple<bool, ObjectBase *>
+PeelHeader(Ptr<const Packet> p, std::string header_name)
+{
+  //debug
+  Ptr<Packet> copy = p->Copy();
+  PacketMetadata::ItemIterator metadataIterator = copy->BeginItem();
+  PacketMetadata::Item item;
+  bool headerFound = false;
+
+  while (metadataIterator.HasNext())
+  {
+    item = metadataIterator.Next();
+    if(item.tid.GetName() == header_name)
+    {
+      headerFound = true;
+      break;
+    }
+  }
+
+  if (headerFound)
+  {
+    Callback<ObjectBase *> constructor = item.tid.GetConstructor();
+    if(!constructor.IsNull())
+    {
+      ObjectBase *instance = constructor();
+      if(instance != 0)
+      {
+        return Tuple<bool, ObjectBase *>(true,instance);
+      }
+    }
+  }
+  return Tuple<bool, ObjectBase *>(false,NULL);
+}
+
 static double unit = 0.1; // unita tempo (s) utilizzata per definire l' intervallo di ogni misura
 
 // Chiamato ogni unita' di tempo
@@ -105,6 +153,16 @@ Rx (Ptr<OutputStreamWrapper> stream, uint32_t *cumRx, Ptr<const Packet> p, Ptr<I
 {
   *cumRx += p->GetSize();
   *stream->GetStream () << Simulator::Now ().GetSeconds () << "\t" << p->GetSize() << std::endl;
+}
+
+static void
+RxGateway(std::string context, Ptr<const Packet> p, Ptr<Ipv4> ipv4, unsigned int val)
+{
+  std::cout << "gateway received packet " << p << "\n";
+
+  Tuple<bool, ObjectBase *> response = PeelHeader(p, "ns3::QuicHeader");
+  QuicHeader *hdr = dynamic_cast<QuicHeader*>(response.second);
+  std::cout << hdr->isInitial();
 }
 
 static void
@@ -321,20 +379,20 @@ main (int argc, char *argv[])
 
 std::cout << "\n#################### SIMULATION SET-UP ####################\n";
 
- LogLevel log_precision = LOG_LEVEL_INFO;
+ LogLevel log_precision = LOG_LEVEL_FUNCTION;
   Time::SetResolution (Time::NS);
  // LogComponentEnableAll (LOG_PREFIX_TIME);
  // LogComponentEnableAll (LOG_PREFIX_FUNC);
  // LogComponentEnableAll (LOG_PREFIX_NODE);
-  //LogComponentEnable ("QuicEchoClientApplication", log_precision);
- // LogComponentEnable ("QuicEchoServerApplication", log_precision);
-//  LogComponentEnable ("QuicHeader", log_precision);
+  LogComponentEnable ("QuicClient", log_precision);
+  LogComponentEnable ("QuicServer", log_precision);
+ // LogComponentEnable ("QuicHeader", log_precision);
  //LogComponentEnable ("QuicSocketBase", log_precision);
  // LogComponentEnable ("QuicStreamBase", LOG_LEVEL_LOGIC);
- LogComponentEnable ("Socket", log_precision);
+// LogComponentEnable ("Socket", log_precision);
  // LogComponentEnable ("Application", log_precision);
- LogComponentEnable ("Node", log_precision);
- LogComponentEnable ("InternetStackHelper", log_precision);
+ //LogComponentEnable ("Node", log_precision);
+// LogComponentEnable ("InternetStackHelper", log_precision);
 //  LogComponentEnable ("QuicSocketFactory", log_precision);
 //  LogComponentEnable ("ObjectFactory", log_precision);
 //  //LogComponentEnable ("TypeId", log_precision);
@@ -344,8 +402,7 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
 //  LogComponentEnable ("QuicEchoHelper", log_precision);
  // LogComponentEnable ("QuicSocketTxBuffer", log_precision);
 //LogComponentEnable ("QuicSocketRxBuffer", log_precision);
-//  LogComponentEnable ("QuicHeader", log_precision);
-//  LogComponentEnable ("QuicSubheader", log_precision);
+ // LogComponentEnable ("QuicSubheader", log_precision);
 //  LogComponentEnable ("Header", log_precision);
 //  LogComponentEnable ("PacketMetadata", log_precision);
 
@@ -411,18 +468,17 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
   std::cout << "\n#### INSTALLAZIONE STACK & ASSEGNAZIONE IP ####\n\n";
   
   // QUIC
-
   QuicHelper stack; 
-
-  stack.InstallQuic (receivers);
-  stack.InstallQuic (sources);
+  NodeContainer quicNodes;
+  quicNodes.Add(sources.Get(0));
+  quicNodes.Add(receivers.Get(0));
+  stack.InstallQuic (quicNodes);
   
   // INTERNET
-/*
-  InternetStackHelper stack;
-  stack.Install (receivers);
-  stack.Install (sources);
-*/
+  InternetStackHelper internetStack;
+  internetStack.Install (gateways);
+
+
 
   Ipv4AddressHelper address;
 
@@ -468,6 +524,11 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
     Time t2 = Seconds(sourceStartTime[i]+0.00001);
     Simulator::Schedule (t1, &Traces, n1->GetId(), "./"+traceDir+"receiver_", ".txt");
     Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
+
+    auto gt = gateways.Get(1);
+    std::ostringstream ids;
+    ids << gt->GetId();
+    Config::Connect ("/NodeList/"+ ids.str() +"/$ns3::Ipv4L3Protocol/Rx", MakeCallback (&RxGateway));
    
 
 
