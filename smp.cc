@@ -79,6 +79,7 @@ PeelHeader(Ptr<const Packet> p, std::string header_name)
   PacketMetadata::Item item;
   bool headerFound = false;
 
+std::cout <<"inizio ricerca\n";
   while (metadataIterator.HasNext())
   {
     item = metadataIterator.Next();
@@ -88,7 +89,7 @@ PeelHeader(Ptr<const Packet> p, std::string header_name)
       break;
     }
   }
-
+std::cout <<"fine ricerca\n";
   if (headerFound)
   {
     Callback<ObjectBase *> constructor = item.tid.GetConstructor();
@@ -158,11 +159,19 @@ Rx (Ptr<OutputStreamWrapper> stream, uint32_t *cumRx, Ptr<const Packet> p, Ptr<I
 static void
 RxGateway(std::string context, Ptr<const Packet> p, Ptr<Ipv4> ipv4, unsigned int val)
 {
-  std::cout << "gateway received packet " << p << "\n";
+  std::string s;
+  s = p->ToString();
+  std::cout << "gateway received packet [" << s << "] size = ";
 
-  Tuple<bool, ObjectBase *> response = PeelHeader(p, "ns3::QuicHeader");
-  QuicHeader *hdr = dynamic_cast<QuicHeader*>(response.second);
-  std::cout << hdr->isInitial();
+
+  Tuple<bool, ObjectBase *> response = PeelHeader(p, "ns3::QuicSubHeader");
+  QuicSubheader *hdr = dynamic_cast<QuicSubheader*>(response.second);
+  //if(hdr== NULL)
+  //std::cout << "Non c'e l'header\n";
+ //else
+// {
+   std::cout << hdr->CalculateSubHeaderLength ()  << "|||\n";
+ //}
 }
 
 static void
@@ -340,9 +349,9 @@ main (int argc, char *argv[])
   nodeId[idx] = 0;
   port[idx] = 900;
   transport_prot[idx] = "quic"; // udp, tcp
-  receiverStartTime[idx] = 0.9;
+  receiverStartTime[idx] = 0;
   receiverStopTime[idx] = duration-0.2;
-  sourceStartTime[idx] = 1.0;
+  sourceStartTime[idx] = 0;
   sourceStopTime[idx] = duration-1.0;
   maxPackets[idx] = 2000000;
   interval[idx] = 50000; // 10.5 Mbps
@@ -520,8 +529,8 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
     // Trace
     auto n1 = receivers.Get (nodeId[i]);
     auto n2 = sources.Get (nodeId[i]);
-    Time t1 = Seconds(receiverStartTime[i]+0.1);
-    Time t2 = Seconds(sourceStartTime[i]+0.00001);
+    Time t1 = Seconds(receiverStartTime[i]);
+    Time t2 = Seconds(sourceStartTime[i]);
     Simulator::Schedule (t1, &Traces, n1->GetId(), "./"+traceDir+"receiver_", ".txt");
     Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
 
@@ -532,7 +541,7 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
    
 
 
-//Packet::EnablePrinting ();
+Packet::EnablePrinting ();
   //Packet::EnableChecking ();
 /*
 	FlowMonitorHelper flowHelper;
