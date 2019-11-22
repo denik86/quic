@@ -79,7 +79,7 @@ PeelHeader(Ptr<const Packet> p, std::string header_name)
   PacketMetadata::Item item;
   bool headerFound = false;
 
-std::cout <<"inizio ricerca\n";
+//std::cout <<"inizio ricerca\n";
   while (metadataIterator.HasNext())
   {
     item = metadataIterator.Next();
@@ -89,7 +89,7 @@ std::cout <<"inizio ricerca\n";
       break;
     }
   }
-std::cout <<"fine ricerca\n";
+//std::cout <<"fine ricerca\n";
   if (headerFound)
   {
     Callback<ObjectBase *> constructor = item.tid.GetConstructor();
@@ -161,16 +161,16 @@ RxGateway(std::string context, Ptr<const Packet> p, Ptr<Ipv4> ipv4, unsigned int
 {
   std::string s;
   s = p->ToString();
-  std::cout << "gateway received packet [" << s << "] size = ";
+  std::cout << "\n\n" << Simulator::Now ().GetSeconds () <<" gateway received packet [" << s << "]";
 
 
   Tuple<bool, ObjectBase *> response = PeelHeader(p, "ns3::QuicSubHeader");
   QuicSubheader *hdr = dynamic_cast<QuicSubheader*>(response.second);
-  //if(hdr== NULL)
-  //std::cout << "Non c'e l'header\n";
+  if(hdr== NULL)
+    std::cout << "--------------------------------------Non c'e l'header\n";
  //else
 // {
-   std::cout << hdr->CalculateSubHeaderLength ()  << "|||\n";
+  // std::cout << hdr->CalculateSubHeaderLength ()  << "|||\n";
  //}
 }
 
