@@ -79,17 +79,26 @@ PeelHeader(Ptr<const Packet> p, std::string header_name)
   PacketMetadata::Item item;
   bool headerFound = false;
 
-//std::cout <<"inizio ricerca\n";
+std::cout <<"inizio ricerca\n";
+
+// IL CAZZO DI ERRORRE ASSERT FAILED SI TROVA QUI!!!!!!!!!!!!!!!!!!!!!!
   while (metadataIterator.HasNext())
   {
+  
+
+    std::cout << "1";
     item = metadataIterator.Next();
+    std::cout << "2";
+    std::cout << item.tid.GetName() << "\n"; // <----- errore qui su questo metodo
+std::cout << "3";
     if(item.tid.GetName() == header_name)
     {
+      
       headerFound = true;
       break;
     }
   }
-//std::cout <<"fine ricerca\n";
+std::cout <<"fine ricerca\n";
   if (headerFound)
   {
     Callback<ObjectBase *> constructor = item.tid.GetConstructor();
@@ -159,9 +168,12 @@ Rx (Ptr<OutputStreamWrapper> stream, uint32_t *cumRx, Ptr<const Packet> p, Ptr<I
 static void
 RxGateway(std::string context, Ptr<const Packet> p, Ptr<Ipv4> ipv4, unsigned int val)
 {
+  std::cout << "inizio stampa";
   std::string s;
   s = p->ToString();
-  std::cout << "\n\n" << Simulator::Now ().GetSeconds () <<" gateway received packet [" << s << "]";
+
+  std::cout << "\n\n" << Simulator::Now ().GetSeconds () <<" Gateway received PACKET:";
+  std::cout << "\n_____________________________ \n"<< s << "\n_____________________________ \n\n";
 
 
   Tuple<bool, ObjectBase *> response = PeelHeader(p, "ns3::QuicSubHeader");
@@ -433,7 +445,8 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
     {
       TypeId tcpTid;
       NS_ABORT_MSG_UNLESS (TypeId::LookupByNameFailSafe (congestion, &tcpTid), "TypeId " << congestion << " not found");
-      Config::SetDefault ("ns3::QuicL4Protocol::SocketType", TypeIdValue (TypeId::LookupByName (congestion)));
+     // Config::SetDefault ("ns3::QuicL4Protocol::SocketType", TypeIdValue (TypeId::LookupByName (congestion)));
+      Config::SetDefault ("ns3::QuicL4Protocol::SocketType", TypeIdValue (TypeId::LookupByName ("ns3::TcpNewReno")));
     }
 
 //** POINT TO POINT - Bottleneck **//
@@ -532,7 +545,7 @@ std::cout << "\n#################### SIMULATION SET-UP ####################\n";
     Time t1 = Seconds(receiverStartTime[i]);
     Time t2 = Seconds(sourceStartTime[i]);
     Simulator::Schedule (t1, &Traces, n1->GetId(), "./"+traceDir+"receiver_", ".txt");
-    Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
+   // Simulator::Schedule (t2, &Traces, n2->GetId(), "./"+traceDir+"source_", ".txt");
 
     auto gt = gateways.Get(1);
     std::ostringstream ids;
